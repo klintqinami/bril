@@ -37,14 +37,12 @@ def tdce_bb_iter(cfg: CFG, bb: BasicBlock):
             delete.append(candidates[c])
 
     for inst in delete:
-        print("Deleting {}".format(inst))
         bb.instructions.remove(inst)
 
     return len(delete) != 0
 
 
 def tdce_bb(cfg: CFG, bb: BasicBlock):
-    print(bb)
     # Iterate to a fixed point
     while tdce_bb_iter(cfg, bb):
         continue
@@ -60,3 +58,4 @@ if __name__ == '__main__':
     cfg = CFG(functions)
     print(cfg)
     tdce(cfg)
+    print(cfg)

@@ -173,7 +173,7 @@ class CFG:
         for i, v in enumerate(self.basic_blocks):
             s += "BB{} [{}]:\n".format(i, v.name)
             for inst in v.instructions:
-                s += "  " + str(inst) + "\n"
+                s += "  " + str(sorted(inst.items())) + "\n"
 
         s += "Edges\n"
         for k in self.edges:

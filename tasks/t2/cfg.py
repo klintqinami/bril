@@ -23,15 +23,17 @@ class Instruction:
 class BasicBlock:
     name = ''
     instructions = None
+    begins_function = False
 
-    def __init__(self, name):
+    def __init__(self, name: str, begins_function: bool = False):
         self.name = name
         self.instructions = []
+        self.begins_function = begins_function
 
     def append(self, instruction):
         self.instructions.append(instruction)
 
-    def create_name(function_name, inst_num, label) -> str:
+    def create_name(function_name: str, inst_num: int, label: str) -> str:
         if label:
             return "_".join((function_name, label))
         else:
@@ -60,12 +62,21 @@ class CFG:
         self.edges = {}
         self.build_cfg(functions)
 
-    def add_edge(self, start, end):
-        if start not in self.edges:
-            self.edges[start] = set()
-        self.edges[start].add(end)
+    def add_edge(self, start: str, end: str):
+        # Find the basic blocks corresponding to these names
+        for bb in self.basic_blocks:
+            if bb.name == start:
+                bb_start = bb
+            if bb.name == end:
+                bb_end = bb
+        assert (bb_start and bb_end)
 
-    def add_basic_block(self, bb):
+        if start not in self.edges:
+            self.edges[bb_start] = set()
+
+        self.edges[bb_start].add(bb_end)
+
+    def add_basic_block(self, bb: BasicBlock):
         # Don't add empty basic blocks
         if bb.is_empty():
             return
@@ -75,10 +86,13 @@ class CFG:
         fname = function['name']
         instructions = function['instrs']
 
-        curr_bb = BasicBlock(fname)
+        bb_begins_fn = True
+        curr_bb = BasicBlock(fname, bb_begins_fn)
         for i, inst in enumerate(instructions):
-            # Add the current instruction to the basic block
-            curr_bb.append(inst)
+            # Add the current instruction to the basic block (if it's an actual
+            # instruction and not a label)
+            if not 'label' in inst:
+                curr_bb.append(inst)
 
             if 'op' in inst and inst['op'] == 'call':
                 # Call instructions will simply get handled by adding an edge
@@ -109,7 +123,8 @@ class CFG:
                 # If the instruction is a terminator, we need to form a new
                 # basic block
                 self.add_basic_block(curr_bb)
-                curr_bb = BasicBlock(BasicBlock.create_name(fname, i, None))
+                new_name = BasicBlock.create_name(fname, i, None)
+                curr_bb = BasicBlock(new_name)
 
             elif 'label' in inst:
                 # If we encounter a label, we need to start a new basic block
@@ -120,6 +135,8 @@ class CFG:
                 self.add_basic_block(curr_bb)
                 curr_bb = BasicBlock(
                     BasicBlock.create_name(fname, i, inst['label']))
+                # Add the label to the start of the new block
+                curr_bb.append(inst)
 
         self.add_basic_block(curr_bb)
 
@@ -160,9 +177,22 @@ class CFG:
 
         s += "Edges\n"
         for k in self.edges:
-            s += "  {} -> {}:\n".format(k, self.edges)
+            s += "  {} -> {}\n".format(k.name,
+                                       ",".join([bb.name for bb in self.edges[k]]))
 
         return s
+
+    # Is this basic block the end of a function?
+    def end_of_function(self, bb: BasicBlock):
+        if bb not in self.edges:
+            return True
+
+        # Any successors must be function entry BBs
+        for successor in self.edges[bb]:
+            if not successor.begins_function:
+                return False
+
+        return True
 
 
 def load_functions():

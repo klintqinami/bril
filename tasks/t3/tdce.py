@@ -5,7 +5,7 @@ from tasks.t2.cfg import *
 # iteration. Multiple iterations may be needed if deletion of an instruction
 # reveals another candidate for deletion. Looks through all of the instructions
 # for instructions that write to a variable that isn't used.
-def tdce_bb_iter(bb: BasicBlock):
+def tdce_bb_iter(cfg: CFG, bb: BasicBlock):
     # Set of variables that have no use since write
     candidates = {}
     delete = []
@@ -29,9 +29,12 @@ def tdce_bb_iter(bb: BasicBlock):
         if dest:
             candidates[dest] = inst
 
-    # Add remaining candidates to the delete set
-    for c in candidates:
-        delete.append(candidates[c])
+    # Reached the end of this basic block and still have some candidates left
+    # over. If this basic block jumps somewhere else, then we cannot delete
+    # these without analyzing their uses in the successors of this basic block.
+    if cfg.end_of_function(bb):
+        for c in candidates:
+            delete.append(candidates[c])
 
     for inst in delete:
         print("Deleting {}".format(inst))
@@ -40,19 +43,20 @@ def tdce_bb_iter(bb: BasicBlock):
     return len(delete) != 0
 
 
-def tdce_bb(bb: BasicBlock):
+def tdce_bb(cfg: CFG, bb: BasicBlock):
     print(bb)
     # Iterate to a fixed point
-    while tdce_bb_iter(bb):
+    while tdce_bb_iter(cfg, bb):
         continue
 
 
 def tdce(cfg: CFG):
     for bb in cfg.basic_blocks:
-        tdce_bb(bb)
+        tdce_bb(cfg, bb)
 
 
 if __name__ == '__main__':
     functions = load_functions_from_stdin()
     cfg = CFG(functions)
+    print(cfg)
     tdce(cfg)

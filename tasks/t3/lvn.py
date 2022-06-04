@@ -3,7 +3,8 @@ from functools import cmp_to_key
 
 
 def is_commutative(op):
-    return op == 'add' or op == 'mul' or op == 'eq' or op == 'and' or op == 'or'
+    commutative_ops = ['add', 'mul', 'eq', 'and', 'or']
+    return op in commutative_ops
 
 
 def get_index(inst, table):
@@ -77,6 +78,58 @@ def convert_table_to_instructions(table, types):
     return new_instrs
 
 
+def insert_constant_result(inst, result):
+    del inst[:]
+    inst.append('const')
+    inst.append(str(result))
+
+
+def fold_constants(inst, table):
+    # If all of the arguments to an op are statically known, fold the computation
+    # into a constant load
+    args = []
+    for idx in inst[1]:
+        # Argument is not defined by an instruction in this scope, and so is not
+        # known staticaly for folding
+        if isinstance(idx, str):
+            continue
+
+        arg, _ = table[idx]
+        op, const = arg
+
+        # Can't constant fold if an argument isn't constant
+        if op != 'const':
+            # We might still be able to fold! If this is an 'and' and one of the
+            # arguments is false, we know the result is false even if we don't
+            # know the other value. Similar argument for 'or' and True, addition
+            # and 0, multiplication and zero or one, etc.
+            continue
+
+        args.append(const)
+
+    opkind = inst[0]
+    if opkind == 'and':
+        if len(args) == 2:
+            result = bool(args[0]) and bool(args[1])
+        elif len(args) == 1 and args[0] == False:
+            result = False
+        else:
+            return
+        insert_constant_result(inst, result)
+
+    if opkind == 'or':
+        if len(args) == 2:
+            result = bool(args[0]) or bool(args[1])
+        elif len(args) == 1 and args[0] == True:
+            result = True
+        else:
+            return
+        insert_constant_result(inst, result)
+
+    if opkind == 'not' and len(args) == 1:
+        insert_constant_result(inst, not bool(args[0]))
+
+
 def lvn_bb(bb: BasicBlock):
     # The principal data structure here will be a table of values and their
     # canonical locations. The way we will represent a value will be to have a
@@ -124,28 +177,18 @@ def lvn_bb(bb: BasicBlock):
             new_args.sort(key=cmp_to_key(compare_args))
 
         new_inst = [op, new_args]
+        fold_constants(new_inst, table)
+
         table_idx = get_index(new_inst, table)
         if table_idx >= 0:
             # Already in the table, so just map the value
-            # print(
-            # "Already have value for {} at {}".format(
-            # definition, table_idx))
             lv_map[definition] = table_idx
         else:
             table.append([new_inst, definition])
             types.append(inst.get('type'))
             lv_map[definition] = len(table) - 1
 
-    # for row in table:
-        # print(row)
-
-    # for v in lv_map:
-        # print("{} -> {}".format(v, lv_map[v]))
-
     ninstrs = convert_table_to_instructions(table, types)
-    # for inst in ninstrs:
-    # print(inst)
-
     bb.instructions = ninstrs
 
 

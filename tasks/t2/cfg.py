@@ -40,6 +40,12 @@ class BasicBlock:
     def is_empty(self):
         return len(self.instructions) == 0
 
+    def __str__(self):
+        s = "[{}]:\n".format(self.name)
+        for inst in self.instructions:
+            s += "  " + str(inst) + "\n"
+        return s
+
 
 class CFG:
     basic_blocks = None
